@@ -1,4 +1,8 @@
+import { createSignal } from "solid-js"
+
 let archiveExtensions: string[] = []
+
+export const [archivePass, setArchivePass] = createSignal<string>()
 
 export const setArchiveExtensions = (extensions: string[]) => {
   archiveExtensions = extensions

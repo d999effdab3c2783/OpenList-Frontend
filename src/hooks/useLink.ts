@@ -1,8 +1,8 @@
-import { objStore, selectedObjs, State, me } from "~/store"
-import { Obj, ArchiveObj } from "~/types"
+import { me, objStore, archivePass, selectedObjs, State } from "~/store"
+import { ArchiveObj, Obj, ObjType } from "~/types"
 import {
-  base_path,
   api,
+  base_path,
   encodePath,
   pathDir,
   pathJoin,
@@ -21,6 +21,14 @@ export const getLinkByDirAndObj = (
   isShare: boolean,
   encodeAll?: boolean,
 ) => {
+  if (
+    isShare &&
+    obj.type !== ObjType.UNKNOWN &&
+    obj.type !== ObjType.FOLDER &&
+    "raw_url" in obj
+  ) {
+    return obj.raw_url
+  }
   if (type !== "preview")
     dir = isShare
       ? dir.substring(3) /* remove /@s */
@@ -55,6 +63,10 @@ export const getLinkByDirAndObj = (
   if (archive) {
     let inner = `${inner_path}/${obj.name}`
     ans += `${ans.includes("?") ? "&" : "?"}inner=${encodePath(inner, encodeAll)}`
+
+    if (archivePass() !== "") {
+      ans += `&pass=${archivePass()}`
+    }
   }
   return ans
 }

@@ -9,6 +9,7 @@ import {
   HStack,
   Icon,
   useColorMode,
+  Flex,
 } from "@hope-ui/solid"
 import { Motion } from "solid-motionone"
 import {
@@ -32,6 +33,8 @@ import {
   password,
   objStore,
   ObjStore,
+  LayoutType,
+  setArchivePass,
 } from "~/store"
 import {
   Obj,
@@ -65,6 +68,14 @@ import { TbCopy, TbLink } from "solid-icons/tb"
 import { AiOutlineCloudDownload } from "solid-icons/ai"
 import { Operations } from "~/pages/home/toolbar/operations"
 import "solid-contextmenu/dist/style.css"
+import { Layout } from "~/pages/home/previews/archive/layout"
+import { ImageItem } from "~/pages/home/previews/archive/ImageItem"
+import lightGallery from "lightgallery"
+import lgZoom from "lightgallery/plugins/zoom"
+import lgThumbnail from "lightgallery/plugins/thumbnail"
+import lgRotate from "lightgallery/plugins/rotate"
+import lgAutoplay from "lightgallery/plugins/autoplay"
+import lgFullscreen from "lightgallery/plugins/fullscreen"
 
 const download = (url: string) => {
   window.open(url, "_blank")
@@ -255,6 +266,7 @@ const Preview = () => {
   const [comment, setComment] = createSignal("")
   const [innerPaths, setInnerPaths] = createSignal<string[]>([])
   const [orderBy, setOrderBy] = createSignal<OrderBy>()
+  const [layout, setLayout] = createSignal<LayoutType>("list")
   const [reverse, setReverse] = createSignal(false)
   const [extractFolder, setExtractFolder] = createSignal<"" | "front" | "back">(
     "",
@@ -288,6 +300,9 @@ const Preview = () => {
     return true
   }
   const getObjs = async (innerPath: string[]) => {
+    if (archive_pass !== "") {
+      setArchivePass(archive_pass)
+    }
     await getObjsMutex.acquire()
     if (requiringPassword() && archive_pass === "") {
       getObjsMutex.release()
@@ -472,41 +487,50 @@ const Preview = () => {
   })
   return (
     <VStack spacing="$2" w="$full">
-      <Breadcrumb pl="$2" pr="$2" w="$full">
-        <BreadcrumbItem>
-          <BreadcrumbLink
-            currentPage={innerPaths().length === 0 && !selectedFile()}
-            on:click={() => {
-              setInnerPaths([])
-              changeFile("")
-            }}
-          >
-            .
-          </BreadcrumbLink>
-        </BreadcrumbItem>
-        <For each={innerPaths()}>
-          {(name, i) => (
+      <HStack spacing="$2" w="$full" justifyContent={"space-between"}>
+        <Breadcrumb pl="$2" pr="$2" w="$full">
+          <BreadcrumbItem>
+            <BreadcrumbLink
+              currentPage={innerPaths().length === 0 && !selectedFile()}
+              on:click={() => {
+                setInnerPaths([])
+                changeFile("")
+              }}
+            >
+              {pathname().split("/").filter(Boolean).at(-1)}
+            </BreadcrumbLink>
+          </BreadcrumbItem>
+          <For each={innerPaths()}>
+            {(name, i) => (
+              <BreadcrumbItem>
+                <BreadcrumbSeparator />
+                <BreadcrumbLink
+                  currentPage={
+                    innerPaths().length === i() + 1 && !selectedFile()
+                  }
+                  on:click={() => {
+                    setInnerPaths(innerPaths().slice(0, i() + 1))
+                    changeFile("")
+                  }}
+                >
+                  {name}
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+            )}
+          </For>
+          <Show when={selectedFile()}>
             <BreadcrumbItem>
               <BreadcrumbSeparator />
-              <BreadcrumbLink
-                currentPage={innerPaths().length === i() + 1 && !selectedFile()}
-                on:click={() => {
-                  setInnerPaths(innerPaths().slice(0, i() + 1))
-                  changeFile("")
-                }}
-              >
-                {name}
+              <BreadcrumbLink currentPage={true}>
+                {selectedFile()}
               </BreadcrumbLink>
             </BreadcrumbItem>
-          )}
-        </For>
-        <Show when={selectedFile()}>
-          <BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbLink currentPage={true}>{selectedFile()}</BreadcrumbLink>
-          </BreadcrumbItem>
+          </Show>
+        </Breadcrumb>
+        <Show when={!requiringPassword() && error() === ""}>
+          {Layout(layout, setLayout)}
         </Show>
-      </Breadcrumb>
+      </HStack>
       <Switch>
         <Match when={error() !== ""}>
           <Error msg={error()} disableColor />
@@ -530,31 +554,88 @@ const Preview = () => {
             when={selectedFile()}
             fallback={
               <MaybeLoading loading={loading()}>
-                <VStack class="list" w="$full" spacing="$1">
-                  <ListTitle sortCallback={sortObjs} disableCheckbox />
-                  <For each={sortedObjs()}>
-                    {(obj, i) => {
-                      const objWithInner = buildObjWithInner(obj)
-                      // Use rawLink to construct the URL for the object
-                      let url = !obj.is_dir ? rawLink(objWithInner) : undefined
-                      let innerPath = buildInnerUrl(obj.name)
-                      return (
-                        <ListItem
-                          obj={obj}
-                          index={i()}
-                          jumpCallback={() =>
-                            setInnerPaths(innerPaths().concat(obj.name))
-                          }
-                          innerPath={innerPath}
-                          url={url}
-                          pass={archive_pass}
-                          onFileClick={() => changeFile(obj.name)}
-                        />
-                      )
-                    }}
-                  </For>
-                  <ContextMenu />
-                </VStack>
+                <Switch>
+                  <Match when={layout() === "list"}>
+                    <VStack class="list" w="$full" spacing="$1">
+                      <ListTitle sortCallback={sortObjs} disableCheckbox />
+                      <For each={sortedObjs()}>
+                        {(obj, i) => {
+                          const objWithInner = buildObjWithInner(obj)
+                          // Use rawLink to construct the URL for the object
+                          let url = !obj.is_dir
+                            ? rawLink(objWithInner)
+                            : undefined
+                          let innerPath = buildInnerUrl(obj.name)
+                          return (
+                            <ListItem
+                              obj={obj}
+                              index={i()}
+                              jumpCallback={() =>
+                                setInnerPaths(innerPaths().concat(obj.name))
+                              }
+                              innerPath={innerPath}
+                              url={url}
+                              pass={archive_pass}
+                              onFileClick={() => changeFile(obj.name)}
+                            />
+                          )
+                        }}
+                      </For>
+                      <ContextMenu />
+                    </VStack>
+                  </Match>
+                  <Match when={layout() === "image"}>
+                    <VStack class="list" w="$full" spacing="$1">
+                      <Flex
+                        w="$full"
+                        gap="$1"
+                        flexWrap="wrap"
+                        class="image-images"
+                      >
+                        <For
+                          each={files().filter((f) => f.type === ObjType.IMAGE)}
+                        >
+                          {(obj, i) => {
+                            return (
+                              <ImageItem
+                                callback={() => {
+                                  lightGallery(document.createElement("div"), {
+                                    addClass: "lightgallery-container",
+                                    dynamic: true,
+                                    thumbnail:
+                                      local["show_gallery_thumbnails"] ===
+                                      "visible",
+                                    plugins: [
+                                      lgZoom,
+                                      lgThumbnail,
+                                      lgRotate,
+                                      lgAutoplay,
+                                      lgFullscreen,
+                                    ],
+                                    dynamicEl: files()
+                                      .filter((f) => f.type === ObjType.IMAGE)
+                                      .map((obj) => {
+                                        const raw = rawLink(obj, true)
+                                        return {
+                                          src: raw,
+                                          thumb:
+                                            obj.thumb === "" ? raw : obj.thumb,
+                                          subHtml: `<h4>${obj.name}</h4>`,
+                                        }
+                                      }),
+                                  }).openGallery()
+                                }}
+                                obj={obj}
+                                index={i()}
+                              />
+                            )
+                          }}
+                        </For>
+                      </Flex>
+                      <ContextMenu />
+                    </VStack>
+                  </Match>
+                </Switch>
               </MaybeLoading>
             }
           >
